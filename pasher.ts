@@ -18,6 +18,8 @@ export class GameScene extends Phaser.Scene {
         this.load.image('Red', 'images/Red.png');
         this.load.image('Chuck', 'images/chuck.png');
         this.load.image('Stella', 'images/stella.png');
+        this.load.image('Box', 'images/box.png');
+        this.load.image('Pig', 'images/pig.png');
 
 
     }
@@ -68,17 +70,39 @@ export class GameScene extends Phaser.Scene {
         });
         this.events.on('update', () => {
             this.bird.checkBoundary(this.elastic);
+
         })
 
         this.matter.add.rectangle(960, 1050, 1920, 60, { isStatic: true });
 
-        for (let i = 0; i < 5; i++) {
-            this.matter.add.rectangle(1200, 970 - i * 85, 80, 80, {
-                restitution: 0.3,
-                friction: 0.5
-            });
 
-        }
+        this.createTower(1400, 950);
+        this.createTower(1800, 400);
+        this.createPig(1730, 950);
+        this.createPig(1830, 400);
+        this.matter.world.on('collisionstart', (event: any) => {
+            event.pairs.forEach((pair: any) => {
+                const { bodyA, bodyB } = pair;
+                const checkAndDestroy = (body: MatterJS.BodyType) => {
+                    if (body.gameObject && (body as any).label === 'pig') {
+                        this.tweens.add({
+                            targets: body.gameObject,
+                            scale: 0,
+                            alpha: 0,
+                            duration: 200,
+
+                            onComplete: () => {
+                                body.gameObject?.destroy();
+                                this.matter.world.remove(body);
+                            }
+                        });
+                    }
+                };
+                checkAndDestroy(bodyA);
+                checkAndDestroy(bodyB);
+            });
+        });
+
     }
     private nextBird() {
         this.currentBirdIndex++
@@ -88,31 +112,81 @@ export class GameScene extends Phaser.Scene {
 
             nextBird.setStatic(false);
             nextBird.setIgnoreGravity(true);
-            this.tweens.add({
-                targets: nextBird,
-                x: this.anchor.x,
-                y: this.anchor.y,
-                duration: 600,
-                ease: 'Back.easeOut',
-                onUpdate: () => {
-                    nextBird.setPosition(nextBird.x, nextBird.y);
-                },
-                onComplete: () => {
-                    this.bird = nextBird;
-                    this.bird.setInteractive();
-                    this.isLaunched = false;
+            nextBird.setVelocity(0, 0);
+            nextBird.setAngularVelocity(0);
+            nextBird.setRotation(0);
 
-                    if (this.bird.body) {
+            nextBird.setPosition(this.anchor.x, this.anchor.y);
 
-                        this.elastic.bodyB = this.bird.body as MatterJS.BodyType;
-                        this.elastic.render.visible = true;
-                        this.mouseSpring.constraint.bodyB = this.bird.body as MatterJS.BodyType;
-                    }
-                }
-            })
+            this.bird = nextBird;
+            this.bird.setInteractive();
+            this.isLaunched = false;
+
+            if (this.bird.body) {
+                this.matter.body.setPosition(this.bird.body as MatterJS.BodyType, { x: this.anchor.x, y: this.anchor.y });
+                this.elastic.bodyA = this.bird.body as MatterJS.BodyType;
+                this.elastic.pointA = { x: 0, y: 0 };
+                this.elastic.render.visible = true;
+                this.time.delayedCall(50, () => {
+                    this.matter.world.removeConstraint(this.mouseSpring.constraint);
+
+                    this.mouseSpring = this.matter.add.mouseSpring({
+                        length: 1,
+                        stiffness: 0.1
+                    });
+                    this.elastic = this.matter.add.constraint(
+                        this.bird.body as MatterJS.BodyType,
+                        this.anchor as any,
+                        0,
+                        0.1, {
+                        pointB: { x: this.anchor.x, y: this.anchor.y },
+                        render: { visible: true, lineColor: 0x5d3a1a, lineThickness: 4 }
+                    });
+                    this.bird.setAwake();
+                });
+            }
+        } else {
+            console.log("¡No hay más pajaritos!");
+            this.elastic.render.visible = false;
         }
     }
+    private createTower(startX: number, startY: number) {
+        const boxWidth = 60;
+        const boxHeight = 100;
+        const rows = 4;
+        const cols = 2;
+
+        for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < cols; j++) {
+                const x = startX + (j * boxWidth);
+                const y = startY - (i * boxHeight);
+
+                const box = this.matter.add.image(x, y, 'Box', undefined, {
+                    restitution: 0.4,
+                    friction: 0.5,
+                    density: 0.005
+                });
+                box.setScale(0.1);
+
+
+
+            }
+        }
+    }
+    private createPig(x: number, y: number) {
+        const pig = this.matter.add.image(x, y, 'Pig', undefined, {
+            shape: 'circle',
+            restitution: 0.5,
+            friction: 0.1,
+        });
+        pig.setScale(0.4)
+        pig.setDisplaySize(60, 60);
+        (pig.body as MatterJS.BodyType).label = 'pig';
+        return pig;
+    }
 }
+
+
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
